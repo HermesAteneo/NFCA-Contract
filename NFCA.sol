@@ -1,9 +1,57 @@
-// SPDX-License-Identifier: CC BY-NC-ND 4.0 International - <PPS/> Protected Public Source License 
+// SPDX-License-Identifier: CC BY-NC-ND 4.0 International - <PPS/> Protected Public Source License
 // https://github.com/HermesAteneo/Protected-Public-Source-License-PPSL
+
+// NFCA - Non Fungible Content Alias // https://nfca.cc
 
 pragma solidity ^0.8.0;
 
-library strings {
+library Strings {
+
+    bytes16 private constant _HEX_SYMBOLS = "0123456789abcdef";
+    function toString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) {
+            return "0";
+        }
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
+
+    function toHexString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) {
+            return "0x00";
+        }
+        uint256 temp = value;
+        uint256 length = 0;
+        while (temp != 0) {
+            length++;
+            temp >>= 8;
+        }
+        return toHexString(value, length);
+    }
+
+    function toHexString(uint256 value, uint256 length) internal pure returns (string memory) {
+        bytes memory buffer = new bytes(2 * length + 2);
+        buffer[0] = "0";
+        buffer[1] = "x";
+        for (uint256 i = 2 * length + 1; i > 1; --i) {
+            buffer[i] = _HEX_SYMBOLS[value & 0xf];
+            value >>= 4;
+        }
+        require(value == 0, "Strings: hex length insufficient");
+        return string(buffer);
+    }
+
     struct slice {
         uint _len;
         uint _ptr;
@@ -70,7 +118,7 @@ library strings {
             mstore(ptr, self)
             mstore(add(ret, 0x20), ptr)
         }
-        ret._len = len(self);
+        ret._len = len(self); 
     }
 
     function copy(slice memory self) internal pure returns (slice memory) {
@@ -83,216 +131,6 @@ library strings {
         assembly { retptr := add(ret, 32) }
         memcpy(retptr, self._ptr, self._len);
         return ret;
-    }
-
-    function len(slice memory self) internal pure returns (uint l) {
-        uint ptr = self._ptr - 31;
-        uint end = ptr + self._len;
-        for (l = 0; ptr < end; l++) {
-            uint8 b;
-            assembly { b := and(mload(ptr), 0xFF) }
-            if (b < 0x80) {
-                ptr += 1;
-            } else if(b < 0xE0) {
-                ptr += 2;
-            } else if(b < 0xF0) {
-                ptr += 3;
-            } else if(b < 0xF8) {
-                ptr += 4;
-            } else if(b < 0xFC) {
-                ptr += 5;
-            } else {
-                ptr += 6;
-            }
-        }
-    }
-
-    function empty(slice memory self) internal pure returns (bool) {
-        return self._len == 0;
-    }
-
-    function compare(slice memory self, slice memory other) internal pure returns (int) {
-        uint shortest = self._len;
-        if (other._len < self._len)
-            shortest = other._len;
-
-        uint selfptr = self._ptr;
-        uint otherptr = other._ptr;
-        for (uint idx = 0; idx < shortest; idx += 32) {
-            uint a;
-            uint b;
-            assembly {
-                a := mload(selfptr)
-                b := mload(otherptr)
-            }
-            if (a != b) {
-                uint mask = type(uint).max; // 0xffff...
-                if(shortest < 32) {
-                  mask = ~(2 ** (8 * (32 - shortest + idx)) - 1);
-                }
-                unchecked {
-                    uint diff = (a & mask) - (b & mask);
-                    if (diff != 0)
-                        return int(diff);
-                }
-            }
-            selfptr += 32;
-            otherptr += 32;
-        }
-        return int(self._len) - int(other._len);
-    }
-
-    function equals(slice memory self, slice memory other) internal pure returns (bool) {
-        return compare(self, other) == 0;
-    }
-
-    function nextRune(slice memory self, slice memory rune) internal pure returns (slice memory) {
-        rune._ptr = self._ptr;
-        if (self._len == 0) {
-            rune._len = 0;
-            return rune;
-        }
-        uint l;
-        uint b;
-        assembly { b := and(mload(sub(mload(add(self, 32)), 31)), 0xFF) }
-        if (b < 0x80) {
-            l = 1;
-        } else if(b < 0xE0) {
-            l = 2;
-        } else if(b < 0xF0) {
-            l = 3;
-        } else {
-            l = 4;
-        }
-        if (l > self._len) {
-            rune._len = self._len;
-            self._ptr += self._len;
-            self._len = 0;
-            return rune;
-        }
-        self._ptr += l;
-        self._len -= l;
-        rune._len = l;
-        return rune;
-    }
-
-    function nextRune(slice memory self) internal pure returns (slice memory ret) {
-        nextRune(self, ret);
-    }
-
-    function ord(slice memory self) internal pure returns (uint ret) {
-        if (self._len == 0) {
-            return 0;
-        }
-        uint word;
-        uint length;
-        uint divisor = 2 ** 248;
-        assembly { word:= mload(mload(add(self, 32))) }
-        uint b = word / divisor;
-        if (b < 0x80) {
-            ret = b;
-            length = 1;
-        } else if(b < 0xE0) {
-            ret = b & 0x1F;
-            length = 2;
-        } else if(b < 0xF0) {
-            ret = b & 0x0F;
-            length = 3;
-        } else {
-            ret = b & 0x07;
-            length = 4;
-        }
-        if (length > self._len) {
-            return 0;
-        }
-        for (uint i = 1; i < length; i++) {
-            divisor = divisor / 256;
-            b = (word / divisor) & 0xFF;
-            if (b & 0xC0 != 0x80) {
-                return 0;
-            }
-            ret = (ret * 64) | (b & 0x3F);
-        }
-        return ret;
-    }
-
-    function keccak(slice memory self) internal pure returns (bytes32 ret) {
-        assembly {
-            ret := keccak256(mload(add(self, 32)), mload(self))
-        }
-    }
-
-    function startsWith(slice memory self, slice memory needle) internal pure returns (bool) {
-        if (self._len < needle._len) {
-            return false;
-        }
-        if (self._ptr == needle._ptr) {
-            return true;
-        }
-        bool equal;
-        assembly {
-            let length := mload(needle)
-            let selfptr := mload(add(self, 0x20))
-            let needleptr := mload(add(needle, 0x20))
-            equal := eq(keccak256(selfptr, length), keccak256(needleptr, length))
-        }
-        return equal;
-    }
-
-    function beyond(slice memory self, slice memory needle) internal pure returns (slice memory) {
-        if (self._len < needle._len) {
-            return self;
-        }
-        bool equal = true;
-        if (self._ptr != needle._ptr) {
-            assembly {
-                let length := mload(needle)
-                let selfptr := mload(add(self, 0x20))
-                let needleptr := mload(add(needle, 0x20))
-                equal := eq(keccak256(selfptr, length), keccak256(needleptr, length))
-            }
-        }
-        if (equal) {
-            self._len -= needle._len;
-            self._ptr += needle._len;
-        }
-        return self;
-    }
-
-    function endsWith(slice memory self, slice memory needle) internal pure returns (bool) {
-        if (self._len < needle._len) {
-            return false;
-        }
-        uint selfptr = self._ptr + self._len - needle._len;
-        if (selfptr == needle._ptr) {
-            return true;
-        }
-        bool equal;
-        assembly {
-            let length := mload(needle)
-            let needleptr := mload(add(needle, 0x20))
-            equal := eq(keccak256(selfptr, length), keccak256(needleptr, length))
-        }
-        return equal;
-    }
-
-    function until(slice memory self, slice memory needle) internal pure returns (slice memory) {
-        if (self._len < needle._len) {
-            return self;
-        }
-        uint selfptr = self._ptr + self._len - needle._len;
-        bool equal = true;
-        if (selfptr != needle._ptr) {
-            assembly {
-                let length := mload(needle)
-                let needleptr := mload(add(needle, 0x20))
-                equal := eq(keccak256(selfptr, length), keccak256(needleptr, length))
-            }
-        }
-        if (equal) {
-            self._len -= needle._len;
-        }
-        return self;
     }
 
     function findPtr(uint selflen, uint selfptr, uint needlelen, uint needleptr) private pure returns (uint) {
@@ -367,19 +205,6 @@ library strings {
         return selfptr;
     }
 
-    function find(slice memory self, slice memory needle) internal pure returns (slice memory) {
-        uint ptr = findPtr(self._len, self._ptr, needle._len, needle._ptr);
-        self._len -= ptr - self._ptr;
-        self._ptr = ptr;
-        return self;
-    }
-
-    function rfind(slice memory self, slice memory needle) internal pure returns (slice memory) {
-        uint ptr = rfindPtr(self._len, self._ptr, needle._len, needle._ptr);
-        self._len = ptr - self._ptr;
-        return self;
-    }
-
     function split(slice memory self, slice memory needle, slice memory token) internal pure returns (slice memory) {
         uint ptr = findPtr(self._len, self._ptr, needle._len, needle._ptr);
         token._ptr = self._ptr;
@@ -424,216 +249,21 @@ library strings {
     function contains(slice memory self, slice memory needle) internal pure returns (bool) {
         return rfindPtr(self._len, self._ptr, needle._len, needle._ptr) != self._ptr;
     }
-
-    function concat(slice memory self, slice memory other) internal pure returns (string memory) {
-        string memory ret = new string(self._len + other._len);
-        uint retptr;
-        assembly { retptr := add(ret, 32) }
-        memcpy(retptr, self._ptr, self._len);
-        memcpy(retptr + self._len, other._ptr, other._len);
-        return ret;
-    }
-
-    function join(slice memory self, slice[] memory parts) internal pure returns (string memory) {
-        if (parts.length == 0)
-            return "";
-        uint length = self._len * (parts.length - 1);
-        for(uint i = 0; i < parts.length; i++)
-            length += parts[i]._len;
-        string memory ret = new string(length);
-        uint retptr;
-        assembly { retptr := add(ret, 32) }
-        for(uint i = 0; i < parts.length; i++) {
-            memcpy(retptr, parts[i]._ptr, parts[i]._len);
-            retptr += parts[i]._len;
-            if (i < parts.length - 1) {
-                memcpy(retptr, self._ptr, self._len);
-                retptr += self._len;
-            }
-        }
-        return ret;
-    }
 }
 
-pragma solidity ^0.8.0;
-
-library Strings {
-    bytes16 private constant _HEX_SYMBOLS = "0123456789abcdef";
-    function toString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) {
-            return "0";
-        }
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
-    }
-
-    function toHexString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) {
-            return "0x00";
-        }
-        uint256 temp = value;
-        uint256 length = 0;
-        while (temp != 0) {
-            length++;
-            temp >>= 8;
-        }
-        return toHexString(value, length);
-    }
-
-    function toHexString(uint256 value, uint256 length) internal pure returns (string memory) {
-        bytes memory buffer = new bytes(2 * length + 2);
-        buffer[0] = "0";
-        buffer[1] = "x";
-        for (uint256 i = 2 * length + 1; i > 1; --i) {
-            buffer[i] = _HEX_SYMBOLS[value & 0xf];
-            value >>= 4;
-        }
-        require(value == 0, "Strings: hex length insufficient");
-        return string(buffer);
-    }
-}
-
-pragma solidity ^0.8.0;
-abstract contract Context {
-    function _msgSender() internal view virtual returns (address) {
-        return msg.sender;
-    }
-    function _msgData() internal view virtual returns (bytes calldata) {
-        return msg.data;
-    }
-}
-
-pragma solidity ^0.8.0;
-
-abstract contract Ownable is Context {
-    address internal _owner;
-    constructor() {
-        _owner = _msgSender();
-    }
+abstract contract Ownable {
+    address internal  _owner = msg.sender;
 
     function owner() internal view virtual returns (address) {
         return _owner;
     }
 
     modifier onlyOwner() {
-        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+        require(owner() == msg.sender, "Ownable: caller is not the owner");
         _;
     }
 
 }
-
-pragma solidity ^0.8.0;
-
-library Address {
-
-    function isContract(address account) internal view returns (bool) {
-        return account.code.length > 0;
-    }
-
-    function sendValue(address payable recipient, uint256 amount) internal {
-        require(address(this).balance >= amount, "Address: insufficient balance");
-
-        (bool success, ) = recipient.call{value: amount}("");
-        require(success, "Address: unable to send value, recipient may have reverted");
-    }
-
-    function functionCall(address target, bytes memory data) internal returns (bytes memory) {
-        return functionCall(target, data, "Address: low-level call failed");
-    }
-
-    function functionCall(
-        address target,
-        bytes memory data,
-        string memory errorMessage
-    ) internal returns (bytes memory) {
-        return functionCallWithValue(target, data, 0, errorMessage);
-    }
-
-    function functionCallWithValue(
-        address target,
-        bytes memory data,
-        uint256 value
-    ) internal returns (bytes memory) {
-        return functionCallWithValue(target, data, value, "Address: low-level call with value failed");
-    }
-
-    function functionCallWithValue(
-        address target,
-        bytes memory data,
-        uint256 value,
-        string memory errorMessage
-    ) internal returns (bytes memory) {
-        require(address(this).balance >= value, "Address: insufficient balance for call");
-        require(isContract(target), "Address: call to non-contract");
-
-        (bool success, bytes memory returndata) = target.call{value: value}(data);
-        return verifyCallResult(success, returndata, errorMessage);
-    }
-
-    function functionStaticCall(address target, bytes memory data) internal view returns (bytes memory) {
-        return functionStaticCall(target, data, "Address: low-level static call failed");
-    }
-
-    function functionStaticCall(
-        address target,
-        bytes memory data,
-        string memory errorMessage
-    ) internal view returns (bytes memory) {
-        require(isContract(target), "Address: static call to non-contract");
-
-        (bool success, bytes memory returndata) = target.staticcall(data);
-        return verifyCallResult(success, returndata, errorMessage);
-    }
-
-    function functionDelegateCall(address target, bytes memory data) internal returns (bytes memory) {
-        return functionDelegateCall(target, data, "Address: low-level delegate call failed");
-    }
-
-    function functionDelegateCall(
-        address target,
-        bytes memory data,
-        string memory errorMessage
-    ) internal returns (bytes memory) {
-        require(isContract(target), "Address: delegate call to non-contract");
-
-        (bool success, bytes memory returndata) = target.delegatecall(data);
-        return verifyCallResult(success, returndata, errorMessage);
-    }
-
-    function verifyCallResult(
-        bool success,
-        bytes memory returndata,
-        string memory errorMessage
-    ) internal pure returns (bytes memory) {
-        if (success) {
-            return returndata;
-        } else {
-            // Look for revert reason and bubble it up if present
-            if (returndata.length > 0) {
-                // The easiest way to bubble the revert reason is using memory via assembly
-                assembly {
-                    let returndata_size := mload(returndata)
-                    revert(add(32, returndata), returndata_size)
-                }
-            } else {
-                revert(errorMessage);
-            }
-        }
-    }
-}
-
-pragma solidity ^0.8.0;
 
 interface IERC721Receiver {
     function onERC721Received(
@@ -644,24 +274,15 @@ interface IERC721Receiver {
     ) external returns (bytes4);
 }
 
-pragma solidity ^0.8.0;
-
 interface IERC165 {
     function supportsInterface(bytes4 interfaceId) external view returns (bool);
 }
 
-pragma solidity ^0.8.0;
-
 abstract contract ERC165 is IERC165 {
-    /**
-     * @dev See {IERC165-supportsInterface}.
-     */
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
         return interfaceId == type(IERC165).interfaceId;
     }
 }
-
-pragma solidity ^0.8.0;
 
 interface IERC721 is IERC165 {
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
@@ -695,7 +316,6 @@ interface IERC721 is IERC165 {
     ) external;
 }
 
-pragma solidity ^0.8.0;
 
 interface IERC721Metadata is IERC721 {
     function name() external view returns (string memory);
@@ -703,21 +323,18 @@ interface IERC721Metadata is IERC721 {
     function tokenURI(uint256 tokenId) external view returns (string memory);
 }
 
-pragma solidity ^0.8.0;
 
-contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
-    using Address for address;
+contract ERC721 is ERC165, IERC721, IERC721Metadata {
+
     using Strings for uint256;
-    string internal _name;
-    string internal _symbol;
+
+    string internal _name = "NFCA - Non Fungible Content Alias ";
+    string internal _symbol = "NFCA";
+
     mapping(uint256 => address) internal _owners;
     mapping(address => uint256) private _balances;
     mapping(uint256 => address) private _tokenApprovals;
     mapping(address => mapping(address => bool)) private _operatorApprovals;
-    constructor(string memory name_, string memory symbol_) {
-        _name = name_;
-        _symbol = symbol_;
-    }
 
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC165, IERC165) returns (bool) {
         return
@@ -759,7 +376,7 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
         address owner = ERC721.ownerOf(tokenId);
         require(to != owner, "ERC721: approval to current owner");
         require(
-            _msgSender() == owner || isApprovedForAll(owner, _msgSender()),
+            msg.sender == owner || isApprovedForAll(owner, msg.sender),
             "ERC721: approve caller is not owner nor approved for all"
         );
         _approve(to, tokenId);
@@ -772,7 +389,7 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
     }
 
     function setApprovalForAll(address operator, bool approved) public virtual override {
-        _setApprovalForAll(_msgSender(), operator, approved);
+        _setApprovalForAll(msg.sender, operator, approved);
     }
 
     function isApprovedForAll(address owner, address operator) public view virtual override returns (bool) {
@@ -784,7 +401,7 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
         address to,
         uint256 tokenId
     ) public virtual override {
-        require(_isApprovedOrOwner(_msgSender(), tokenId), "ERC721: transfer caller is not owner nor approved");
+        require(_isApprovedOrOwner(msg.sender, tokenId), "ERC721: transfer caller is not owner nor approved");
         _transfer(from, to, tokenId);
     }
 
@@ -802,7 +419,7 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
         uint256 tokenId,
         bytes memory _data
     ) public virtual override {
-        require(_isApprovedOrOwner(_msgSender(), tokenId), "ERC721: transfer caller is not owner nor approved");
+        require(_isApprovedOrOwner(msg.sender, tokenId), "ERC721: transfer caller is not owner nor approved");
         _safeTransfer(from, to, tokenId, _data);
     }
 
@@ -871,7 +488,6 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
         require(ERC721.ownerOf(tokenId) == from, "ERC721: transfer from incorrect owner");
         require(to != address(0), "ERC721: transfer to the zero address");
         _beforeTokenTransfer(from, to, tokenId);
-        // Clear approvals from the previous owner
         _approve(address(0), tokenId);
         _balances[from] -= 1;
         _balances[to] += 1;
@@ -901,8 +517,8 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
         uint256 tokenId,
         bytes memory _data
     ) private returns (bool) {
-        if (to.isContract()) {
-            try IERC721Receiver(to).onERC721Received(_msgSender(), from, tokenId, _data) returns (bytes4 retval) {
+        if (to.code.length > 0) {
+            try IERC721Receiver(to).onERC721Received(msg.sender, from, tokenId, _data) returns (bytes4 retval) {
                 return retval == IERC721Receiver.onERC721Received.selector;
             } catch (bytes memory reason) {
                 if (reason.length == 0) {
@@ -931,44 +547,20 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
     ) internal virtual {}
 }
 
-pragma solidity ^0.8.0;
-
-abstract contract ERC721Burnable is Context, ERC721 {
+abstract contract ERC721Burnable is ERC721 {
     function burn(uint256 tokenId) internal virtual {
         //solhint-disable-next-line max-line-length
-        require(_isApprovedOrOwner(_msgSender(), tokenId), "ERC721Burnable: caller is not owner nor approved");
+        require(_isApprovedOrOwner(msg.sender, tokenId), "ERC721Burnable: caller is not owner nor approved");
         _burn(tokenId);
     }
 }
 
 
-pragma solidity ^0.8.0;
-
-//----------------------------------------------------------------------------
-// Maths Library /////////////////////////////////////////////////////////////
-//----------------------------------------------------------------------------
-
 library safeMath{
-    function mul(uint256 a, uint256 b) internal pure returns (uint256 c) {
-        if (a == 0) {
-          return 0;
-        }
-        c = a * b;
-        assert(c / a == b);
-        return c;
-    }
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a / b;
-    }
     function usub(uint256 a, uint256 b) internal pure returns (uint256) {
         if(a <= b){ return 0; }
         else{ return a - b; }
-    }    
-    function add(uint256 a, uint256 b) internal pure returns (uint256 c) {
-        c = a + b;
-        assert(c >= a);
-        return c;
-    }
+    }  
 }//safeMath
 
 //Storage Contract
@@ -1010,7 +602,7 @@ contract Storage {
 contract KeyControl is Storage, Ownable {
 
     using safeMath for uint;
-    using strings for *;
+    using Strings for *;
 
     //Set URLs//
     string internal ImgURL = "";
@@ -1204,8 +796,8 @@ contract KeyControl is Storage, Ownable {
 
     //Special chars counts array //substract length in alias chars count
     function Admin_MultiChar2Struct(string memory str) public onlyOwner {
-        strings.slice memory s = str.toSlice();
-        strings.slice memory delim = "-".toSlice();                        
+        Strings.slice memory s = str.toSlice();
+        Strings.slice memory delim = "-".toSlice();                        
         string[] memory parts = new string[](s.count(delim));
 
         StructMultiChars memory e;
@@ -1250,8 +842,8 @@ contract KeyControl is Storage, Ownable {
     //Invalid chars array
     function Admin_NoValidChars2Struct(string memory str) public onlyOwner {
         //char-char-
-        strings.slice memory s = str.toSlice();
-        strings.slice memory delim = "-".toSlice();                        
+        Strings.slice memory s = str.toSlice();
+        Strings.slice memory delim = "-".toSlice();                        
         string[] memory parts = new string[](s.count(delim)+1);
 
         StructNoValidChars memory e; 
@@ -1288,60 +880,6 @@ contract KeyControl is Storage, Ownable {
         }
         return output;    
     }
-
-
-    //SE Tool
-    function SE_ByKeyWord(string memory _kword, string memory _where, string memory _type, uint _mint_ts, uint _reg_ts, uint _end, uint _qty) public view returns (string memory) {
-        string memory output = "";
-        uint repeated = 0;
-
-        if(_end == 0) { _end = RecordsA.length; }
-        if(_qty > SEMax || _qty == 0) { _qty = SEMax; } //Avoid block out of gas attack
-        uint _start = _end.usub(_qty);
-
-        for (uint i = _start; i <= _end; i++) {
-            
-            if(IndexState[i]==3){ continue; } //Burned
-
-            repeated = 0;
-
-            //Only no minted if 0 // 1 for minted and not
-            if(_mint_ts == 0){ if(RecordsA[i].Mint_TS >_mint_ts ){ continue; } }
-
-            //Only minted after _mint_ts
-            if(_mint_ts != 1 && RecordsA[i].Mint_TS < _mint_ts ){ continue; }
-
-            //Reg after _reg_ts // 0 for all
-            if(RecordsA[i].Created_TS < _reg_ts ){ continue; }
-
-            if(keccak256(bytes(_type))== keccak256(bytes(RecordsA[i].Type)) || keccak256(bytes(_type)) == keccak256(bytes("all")) ){
-
-                if(keccak256(bytes(_where)) == keccak256(bytes("alias")) || keccak256(bytes(_where)) == keccak256(bytes("all")) ){
-                    if( ContainWord( _kword, RecordsA[i].Alias ) ){
-                        repeated++;
-                    }
-                }
-                if(keccak256(bytes(_where)) == keccak256(bytes("keywords")) || keccak256(bytes(_where)) == keccak256(bytes("all")) ){
-                    if( ContainWord( _kword, RecordsA[i].KeyWords ) ){
-                        repeated++;
-                    }
-                }
-                if(keccak256(bytes(_where)) == keccak256(bytes("description")) || keccak256(bytes(_where)) == keccak256(bytes("all")) ){
-                    if( ContainWord( _kword, RecordsA[i].Description ) ){
-                        repeated++;
-                    }
-                }
-
-            }//_type
-
-            if( repeated > 0 ){
-                output = string( abi.encodePacked(output , Strings.toString( i ), ':', Strings.toString( repeated ), '-' ));
-            }
-        }//for
-
-        return output;
-    }
-
 
     //Pausing new regs and mints
     bool public PausedShort = true;
@@ -1497,9 +1035,9 @@ contract KeyControl is Storage, Ownable {
 
 contract NFCA is ERC721, KeyControl, ERC721Burnable{
 
-    constructor() ERC721("Mint Alias v.3.0", "MA3") {
+    constructor(){
         //ZERO 0 - Project owner
-        NewRecord( "0", "Mint Alias v.3.0 project ownership", "text", "", "Mint Alias v.3.0 project ownership", address(0), msg.sender, "", false);
+        NewRecord( "0", "NFCA project ownership", "text", "", "NFCA project ownership", address(0), msg.sender, "", false);
     }
 
     function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
@@ -1633,4 +1171,4 @@ contract NFCA is ERC721, KeyControl, ERC721Burnable{
         return TotalRecords(2);
     } 
 
-}//NFCA contract 
+}//NFCA contract
