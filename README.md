@@ -2,7 +2,7 @@
 Ethereum smart contract of NFCA - Non-Fungible Content Alias<br>
 
 https://nfca.cc<br>
-https://mintalias.top<br><br>
+<br>
 
 
 ## Version note
