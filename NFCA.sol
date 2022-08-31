@@ -929,16 +929,11 @@ contract KeyControl is Storage, Ownable {
         uint256 RALen = AliasRealCharCount(_Alias);  
         if( RALen < FALen){ //Alias shorter than FALen
             if(PausedShort && !IsOwner() ){ revert( string( abi.encodePacked( "Alias needs to be longer than ", Strings.toString( FALen - 1 ), " chars" ) ) ); }
-            
-            uint256 Price = 0;
-            if(RALen == 1) { Price = PSA; }
-            else{ Price = (PSA/RALen) / (RALen/2); }
-
-            if(msg.value < Price){ return false; } PayToAgent(_Agent);
+            if(msg.value < PSA){ return false; } PayToAgent(_Agent);
+        }else{ //Long Alias
+            if(PausedLong && !IsOwner() ){ revert("New regs paused");}
+            if(msg.value < PLA){ return false; } PayToAgent(_Agent);
         }
-        //Long Alias
-        if(PausedLong && !IsOwner() ){ revert("New regs paused");}
-        if(msg.value < PLA){ return false; } PayToAgent(_Agent);
         return true;   
     }
 
@@ -1071,13 +1066,13 @@ contract NFCA is ERC721, KeyControl, ERC721Burnable{
         string memory _KeyWords,  
         string memory _Description,
         string memory _MetaData
-    ) public {
+    ) public payable{
         require( RecordsA[_index].WOwner == msg.sender, "Alias owner required" );
         require( EditData(_index, _CID, _Type, _KeyWords, _Description, _MetaData) ,"Data not edited");
     }
 
     //Delete Record
-    function DeleteRecord( uint256 i) public {
+    function DeleteRecord( uint256 i) public payable{
         require( RecordsA[i].WOwner == msg.sender, "Alias owner required" );
         if( isNFT(i) ){  _burn(i); }
         require( DeleteData(i) ,"Data not deleted");
